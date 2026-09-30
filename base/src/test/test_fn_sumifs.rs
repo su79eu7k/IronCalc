@@ -150,3 +150,49 @@ fn test_fn_sumifs_whole_column_sees_a_spill_beyond_the_used_area() {
         assert_eq!(model.evaluation.restarts_in_last_evaluation, 1, "{formula}");
     }
 }
+
+#[test]
+fn test_fn_ifs_single_cell_ranges() {
+    // A single-cell reference is a 1x1 range, as in Excel.
+    let mut model = new_empty_model();
+    model._set("A1", "1");
+    model._set("A2", "2");
+    model._set("A3", "3");
+    model._set("B1", "=SUMIF(A1,\">0\",A2)");
+    model._set("B2", "=COUNTIF(A2,2)");
+    model._set("B3", "=SUMIFS(A3,A1,1)");
+    model._set("B4", "=SUMIF(A1,TRUE,A2)");
+    model._set("B5", "=COUNTIFS(A1,1,A2,2)");
+    model._set("B6", "=AVERAGEIF(A2,\">1\")");
+    model._set("B7", "=AVERAGEIFS(A3,A1,1)");
+    model._set("B8", "=MAXIFS(A3,A1,1)");
+    model._set("B9", "=MINIFS(A3,A1,0)");
+    model._set("B10", "=SUMIF(A2,2)");
+    // The single cell is a formula evaluated on demand.
+    model._set("B11", "=COUNTIF(C1,4)");
+    model._set("C1", "=A2*2");
+    model.evaluate();
+
+    assert_eq!(model._get_text("B1"), *"2");
+    assert_eq!(model._get_text("B2"), *"1");
+    assert_eq!(model._get_text("B3"), *"3");
+    assert_eq!(model._get_text("B4"), *"0");
+    assert_eq!(model._get_text("B5"), *"1");
+    assert_eq!(model._get_text("B6"), *"2");
+    assert_eq!(model._get_text("B7"), *"3");
+    assert_eq!(model._get_text("B8"), *"3");
+    assert_eq!(model._get_text("B9"), *"0");
+    assert_eq!(model._get_text("B10"), *"2");
+    assert_eq!(model._get_text("B11"), *"1");
+    assert_eq!(
+        crate::test::dynamic_evaluation::oracle::violations(&mut model),
+        Vec::<String>::new()
+    );
+
+    // The results follow the cells.
+    model._set("A2", "5");
+    model.evaluate();
+    assert_eq!(model._get_text("B2"), *"0");
+    assert_eq!(model._get_text("B6"), *"5");
+    assert_eq!(model._get_text("B11"), *"0");
+}

@@ -70,22 +70,10 @@ impl<'a> Model<'a> {
             // NB: We cannot do:
             // fn_criteria.push(build_criteria(&criterion));
             // because criterion doesn't live long enough
-            let result = self.evaluate_node_in_context(&args[case_index * 2], cell);
-            if result.is_error() {
-                return result;
-            }
-            if let CalcResult::Range { left, right } = result {
-                if left.sheet != right.sheet {
-                    return CalcResult::new_error(
-                        Error::VALUE,
-                        cell,
-                        "Ranges are in different sheets".to_string(),
-                    );
-                }
-                // TODO test ranges are of the same size as sum_range
-                ranges.push(Range { left, right });
-            } else {
-                return CalcResult::new_error(Error::VALUE, cell, "Expected a range".to_string());
+            // TODO test ranges are of the same size as sum_range
+            match self.node_to_range(&args[case_index * 2], cell) {
+                Ok(range) => ranges.push(range),
+                Err(e) => return e,
             }
         }
         for criterion in criteria.iter() {
@@ -204,26 +192,7 @@ impl<'a> Model<'a> {
         if args_count < 3 || args_count.is_multiple_of(2) {
             return Err(CalcResult::new_args_number_error(cell));
         }
-        let arg_0 = self.evaluate_node_in_context(&args[0], cell);
-        if arg_0.is_error() {
-            return Err(arg_0);
-        }
-        let sum_range = if let CalcResult::Range { left, right } = arg_0 {
-            if left.sheet != right.sheet {
-                return Err(CalcResult::new_error(
-                    Error::VALUE,
-                    cell,
-                    "Ranges are in different sheets".to_string(),
-                ));
-            }
-            Range { left, right }
-        } else {
-            return Err(CalcResult::new_error(
-                Error::VALUE,
-                cell,
-                "Expected a range".to_string(),
-            ));
-        };
+        let sum_range = self.node_to_range(&args[0], cell)?;
 
         let case_count = (args_count - 1) / 2;
         // NB: this is a beautiful example of the borrow checker
@@ -238,27 +207,8 @@ impl<'a> Model<'a> {
             // NB: We cannot do:
             // fn_criteria.push(build_criteria(&criterion));
             // because criterion doesn't live long enough
-            let result = self.evaluate_node_in_context(&args[case_index * 2 - 1], cell);
-            if result.is_error() {
-                return Err(result);
-            }
-            if let CalcResult::Range { left, right } = result {
-                if left.sheet != right.sheet {
-                    return Err(CalcResult::new_error(
-                        Error::VALUE,
-                        cell,
-                        "Ranges are in different sheets".to_string(),
-                    ));
-                }
-                // TODO test ranges are of the same size as sum_range
-                ranges.push(Range { left, right });
-            } else {
-                return Err(CalcResult::new_error(
-                    Error::VALUE,
-                    cell,
-                    "Expected a range".to_string(),
-                ));
-            }
+            // TODO test ranges are of the same size as sum_range
+            ranges.push(self.node_to_range(&args[case_index * 2 - 1], cell)?);
         }
         for criterion in criteria.iter() {
             fn_criteria.push(build_criteria(criterion, self.locale));
@@ -335,12 +285,15 @@ impl<'a> Model<'a> {
     }
 
     /// Evaluates `node` and requires it to be a single-sheet range.
+    ///
+    /// `node` is evaluated in reference context, so a single-cell reference such
+    /// as `A1` is the 1x1 range A1:A1, as in Excel (`COUNTIF(A1,"x")`).
     fn node_to_range(
         &mut self,
         node: &Node,
         cell: CellReferenceIndex,
     ) -> Result<Range, CalcResult> {
-        let value = self.evaluate_node_in_context(node, cell);
+        let value = self.evaluate_node_with_reference(node, cell);
         if value.is_error() {
             return Err(value);
         }
