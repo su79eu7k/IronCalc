@@ -1,5 +1,5 @@
 use super::{
-    stringify::{stringify_reference, DisplaceData},
+    stringify::{stringify_reference, unary_minus_needs_parentheses, DisplaceData},
     ArrayNode, Node, Reference,
 };
 use crate::{
@@ -484,10 +484,19 @@ fn to_string_moved(
             to_string_moved(right, move_context, locale, language),
         ),
         UnaryKind { kind, right } => match kind {
-            OpUnary::Minus => format!(
-                "-{}",
-                to_string_moved(right, move_context, locale, language)
-            ),
+            OpUnary::Minus => {
+                if unary_minus_needs_parentheses(right) {
+                    format!(
+                        "-({})",
+                        to_string_moved(right, move_context, locale, language)
+                    )
+                } else {
+                    format!(
+                        "-{}",
+                        to_string_moved(right, move_context, locale, language)
+                    )
+                }
+            }
             OpUnary::Percentage => format!(
                 "{}%",
                 to_string_moved(right, move_context, locale, language)

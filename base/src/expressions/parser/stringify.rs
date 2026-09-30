@@ -484,6 +484,54 @@ fn format_function(
 // * =RC+R1C1
 // * =A1+B1
 
+/// Whether the operand of a unary minus has to be written in parentheses.
+///
+/// Unary minus binds tighter than every binary operator (`-2^2` is 4), so an
+/// operand built with one must keep its parentheses: `-(A1>1)` written as
+/// `-A1>1` would be read back as `(-A1)>1`, and `-(2*3)^2` as `-2*3^2`.
+pub(crate) fn unary_minus_needs_parentheses(right: &Node) -> bool {
+    use self::Node::*;
+    match right {
+        BooleanKind(_)
+        | NumberKind(_)
+        | StringKind(_)
+        | ReferenceKind { .. }
+        | RangeKind { .. }
+        | WrongReferenceKind { .. }
+        | WrongRangeKind { .. }
+        | OpRangeKind { .. }
+        | FunctionKind { .. }
+        | NamedFunctionKind { .. }
+        | LambdaDefKind { .. }
+        | LambdaCallKind { .. }
+        | ArrayKind(_)
+        | DefinedNameKind(_)
+        | TableNameKind(_)
+        | NamedVariableKind { .. }
+        | ImplicitIntersection { .. }
+        | SpillRangeOperator { .. }
+        | ErrorKind(_)
+        | ParseErrorKind { .. }
+        | EmptyArgKind => false,
+
+        // `--A1` is read back as two minus signs.
+        UnaryKind {
+            kind: OpUnary::Minus,
+            ..
+        } => false,
+
+        OpPowerKind { .. }
+        | OpSumKind { .. }
+        | OpProductKind { .. }
+        | OpConcatenateKind { .. }
+        | CompareKind { .. }
+        | UnaryKind {
+            kind: OpUnary::Percentage,
+            ..
+        } => true,
+    }
+}
+
 fn stringify(
     node: &Node,
     context: Option<&CellReferenceRC>,
@@ -960,34 +1008,7 @@ fn stringify(
         NamedVariableKind { name, id: _ } => name.to_string(),
         UnaryKind { kind, right } => match kind {
             OpUnary::Minus => {
-                let needs_parentheses = match **right {
-                    BooleanKind(_)
-                    | NumberKind(_)
-                    | StringKind(_)
-                    | ReferenceKind { .. }
-                    | RangeKind { .. }
-                    | WrongReferenceKind { .. }
-                    | WrongRangeKind { .. }
-                    | OpRangeKind { .. }
-                    | OpConcatenateKind { .. }
-                    | OpProductKind { .. }
-                    | FunctionKind { .. }
-                    | NamedFunctionKind { .. }
-                    | LambdaDefKind { .. }
-                    | LambdaCallKind { .. }
-                    | ArrayKind(_)
-                    | DefinedNameKind(_)
-                    | TableNameKind(_)
-                    | NamedVariableKind { .. }
-                    | ImplicitIntersection { .. }
-                    | SpillRangeOperator { .. }
-                    | CompareKind { .. }
-                    | ErrorKind(_)
-                    | ParseErrorKind { .. }
-                    | EmptyArgKind => false,
-
-                    OpPowerKind { .. } | OpSumKind { .. } | UnaryKind { .. } => true,
-                };
+                let needs_parentheses = unary_minus_needs_parentheses(right);
                 if needs_parentheses {
                     format!(
                         "-({})",

@@ -38,6 +38,32 @@ fn to_f64(value: &ArrayNode) -> Result<f64, Error> {
 }
 
 impl<'a> Model<'a> {
+    /// Applies the unary operator `op` element-wise for arrays/numbers.
+    pub(crate) fn handle_unary(
+        &mut self,
+        right: &Node,
+        cell: CellReferenceIndex,
+        op: &dyn Fn(f64) -> f64,
+    ) -> CalcResult {
+        match self.get_number_or_array(right, cell) {
+            Ok(NumberOrArray::Number(f)) => CalcResult::Number(op(f)),
+            Ok(NumberOrArray::Array(array)) => CalcResult::Array(
+                array
+                    .iter()
+                    .map(|row| {
+                        row.iter()
+                            .map(|node| match to_f64(node) {
+                                Ok(f) => ArrayNode::Number(op(f)),
+                                Err(e) => ArrayNode::Error(e),
+                            })
+                            .collect()
+                    })
+                    .collect(),
+            ),
+            Err(s) => s,
+        }
+    }
+
     /// Applies `op` element‐wise for arrays/numbers.
     pub(crate) fn handle_arithmetic(
         &mut self,
