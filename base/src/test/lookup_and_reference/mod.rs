@@ -1,3 +1,4 @@
+mod test_approximate_lookup_blanks;
 mod test_fn_address_areas;
 mod test_fn_choosecols_chooserows;
 mod test_fn_expand;

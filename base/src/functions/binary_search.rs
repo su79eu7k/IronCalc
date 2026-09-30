@@ -175,13 +175,36 @@ impl<'a> Model<'a> {
 /// Old style binary search over an already materialized vector of values.
 /// Returns the index of the matching element or the largest element smaller
 /// than `target`. Returns `-2` if `target` is smaller than every element.
+///
+/// Empty cells are skipped, as in Excel: a blank row inside the lookup column,
+/// or the trailing blanks of a whole column (`MATCH(9,A:A)`), are not values.
 pub(crate) fn binary_search_on_array(target: &CalcResult, array: &[CalcResult]) -> i32 {
+    if !array.iter().any(|v| matches!(v, CalcResult::EmptyCell)) {
+        return binary_search_by(target, array.len(), |i| &array[i]);
+    }
+    let positions: Vec<usize> = array
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| !matches!(v, CalcResult::EmptyCell))
+        .map(|(i, _)| i)
+        .collect();
+    match binary_search_by(target, positions.len(), |i| &array[positions[i]]) {
+        -2 => -2,
+        i => positions[i as usize] as i32,
+    }
+}
+
+/// Binary search over the `len` values `value(0), value(1), ...`.
+fn binary_search_by<'a, F>(target: &CalcResult, len: usize, value: F) -> i32
+where
+    F: Fn(usize) -> &'a CalcResult,
+{
     // We apply binary search leftmost for value in the array
     let mut l = 0;
-    let mut r = array.len();
+    let mut r = len;
     while l < r {
         let m = (l + r) / 2;
-        match compare_values(&array[m], target) {
+        match compare_values(value(m), target) {
             -1 => {
                 l = m + 1;
             }
